@@ -391,6 +391,7 @@ void quad_mode(void *argument);
 void telemetry_task(void *argument);
 void fw_mode(void *argument);
 void vtol_task(void *argument);
+void actuator_emergency_stop_latch(void);
 
 /* USER CODE BEGIN PFP */
 
@@ -755,6 +756,78 @@ void motor_check(void) {
 
 		HAL_Delay(20);
 
+	}
+}
+
+
+/* Pushkar, 22-05-2026
+ *  we can add modes later as per modes of FCU i.e VTOL, QUAD or FXDW*/
+
+/**
+  * @brief  Function to lock the Actuators Manually
+  * @note  	Use In the respective modes i.e VTOL,QUAD,FXDW , Check before every Control loop !
+  * 		After triggering, a system reset is required.
+  * @param  None
+  * @retval None
+
+ * NOTE : Function uses Hard infinite loop , do not use while(1)
+ */
+
+void actuator_emergency_stop_latch(void)
+{
+	if(display_channels[9]>1500 ){
+
+
+	    if (mode_flag == 0) 	// Quad
+	    {
+	    	M1 = 1000;
+			M2 = 1000;
+			M3 = 1000;
+			M4 = 1000;
+
+			set_raw_ccr(M1, 5);
+			set_raw_ccr(M4, 7);
+			set_raw_ccr(M3, 4);
+			set_raw_ccr(M2, 6);
+
+			arm_flag = 0;
+			disarm_flag = 1;
+
+
+			HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+			HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_2);
+			HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_3);
+
+			HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_1);
+			HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_2);
+			HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_3);
+			HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_4);
+
+			for(;;){}
+
+	    }
+	    else if (mode_flag == 1)     // Fixed wing
+	    {
+	    	arm_flag = 0;
+	    	disarm_flag = 1;
+
+
+	        set_raw_ccr(1000, 6);   // Motor off
+	        set_raw_ccr(1500, 4);   // Elevon neutral
+	        set_raw_ccr(1500, 5);   // Elevon neutral
+
+	        for(;;){}
+	    }
+	    else if (mode_flag == 2)     // VTOL
+	    {
+	    	arm_flag = 0;
+	    	disarm_flag = 1;
+
+	        for(;;){}
+	    }
+	}
+	else{
+		__NOP();
 	}
 }
 
@@ -1587,7 +1660,7 @@ void quad_mode(void *argument)
 	/* Infinite loop */
 
 	for (;;) {
-
+		actuator_emergency_stop_latch();
 		quad_task ^= 1;
 		static float angle_saturation_limit = 20.0f;
 
@@ -1989,6 +2062,7 @@ void fw_mode(void *argument)
 
 	float throttle;
 	for (;;) {
+		actuator_emergency_stop_latch();
 
 		osSemaphoreAcquire(timer_semHandle, osWaitForever);
 
@@ -2103,6 +2177,7 @@ void vtol_task(void *argument)
   /* USER CODE BEGIN vtol_task */
 	/* Infinite loop */
 	for (;;) {
+		actuator_emergency_stop_latch();
 		osDelay(1);
 	}
   /* USER CODE END vtol_task */
