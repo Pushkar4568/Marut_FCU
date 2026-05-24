@@ -20,14 +20,64 @@ extern float calibration_const_global_gx;
 extern float calibration_const_global_gy;
 extern float calibration_const_global_gz;
 
-float Roll = 0.0f;
-float Pitch = 0.0f;
-
 extern I2C_HandleTypeDef hi2c1;
 
 static kalman_t kalmanX = { .q_angle = 0.001f, .q_bias = 0.003f, .r_measure = 1.25f, };
 
 static kalman_t kalmanY = { .q_angle = 0.001f, .q_bias = 0.003f, .r_measure = 0.80f, };
+
+typedef struct{
+	int16_t ax;
+	int16_t ay;
+	int16_t az;
+
+	float Ax; 
+	float Ay; 
+	float Az;
+}mpu_accel_raw; 
+
+typedef struct{
+
+	float roll = 0.0f;
+    float pitch = 0.0f;
+
+}accel_roll_pitch;
+
+typedef struct{
+	float r = 0; 
+	float p = 0;
+	float rc ;
+	float pc; 
+}accel_roll_pitch_calib_constant;
+
+typedef struct{
+	float rc ;
+	float pc ;
+}gyro_roll_pitch_calib_constant;
+
+typedef struct{
+	float gx_offset ;
+	float gy_offset ;
+	float gz_offset ;
+}gyro_calib;
+
+typedef struct{
+	float ax_offset ;
+	float ay_offset ;
+	float az_offset ;
+}accel_calib;
+
+typedef struct{
+	float Gx; 
+	float Gy; 
+	float Gz;
+}mpu_gyro_raw;
+
+typedef struct{
+	float roll = 0.0f;
+	float pitch = 0.0f;
+}gyro_roll_pitch;
+
 
 void Kalman_Init(kalman_t *K) {
 	K->angle = 0.0f;
@@ -66,212 +116,109 @@ void mpu_init(void) {
 	Kalman_Init(&kalmanY);
 }
 
-float mpu_accel_read(int ret) {
+void mpu_accel_read(mpu_accel_raw *param) {
 	uint8_t Rec_Data[6];
-	int16_t ax;
-	int16_t ay;
-	int16_t az;
-	float Ax; 
-	float Ay; 
-	float Az;
-
-	HAL_I2C_Mem_Read(&hi2c1, MPU6050_I2C_ADDR, ACCEL_XOUT_H_REG, 1, Rec_Data, 6,
-			50);
-
-	ax = (int16_t) (Rec_Data[0] << 8 | Rec_Data[1]);
-	ay = (int16_t) (Rec_Data[2] << 8 | Rec_Data[3]);
-	az = (int16_t) (Rec_Data[4] << 8 | Rec_Data[5]);
-
-	Ax = ax / 16384.0f;
-	Ay = ay / 16384.0f;
-	Az = az / 16384.0f;
-
-	if (ret == 0)
-	{
-		return Ax;
-	}
-	else if (ret == 1)
-	{
-		return Ay;
-	}
-	else if (ret == 2)
-	{
-		return Az;
-	}
-	else
-	{
-		return 0.0f;
-	}
-}
-
-float mpu_roll_pitch_read_accel(int ret) {
-
-	uint8_t Rec_Data[6];
-
-	int16_t ax; 
-	int16_t ay; 
-	int16_t az;
-
-	float Ax; 
-	float Ay; 
-	float Az;
-
-	HAL_I2C_Mem_Read(&hi2c1, MPU6050_I2C_ADDR, ACCEL_XOUT_H_REG, 1, Rec_Data, 6,
-			50);
-
-	ax = (int16_t) (Rec_Data[0] << 8 | Rec_Data[1]);
-	ay = (int16_t) (Rec_Data[2] << 8 | Rec_Data[3]);
-	az = (int16_t) (Rec_Data[4] << 8 | Rec_Data[5]);
-
-	Ax = ax / 16384.0f;
-	Ay = ay / 16384.0f;
-	Az = az / 16384.0f;
-
-	Roll = atan2f(Ay, sqrtf(Ax * Ax + Az * Az)) * 180.0f / M_PI;
-	Pitch = atan2f(-Ax, sqrtf(Ay * Ay + Az * Az)) * 180.0f / M_PI;
 	
-	if (ret == 0)
-	{
-		return Roll;
-	}
-	else if (ret == 1)
-	{
-		return Pitch;
-	}
-	else
-	{
-		return 0.0f;
-	}
+	HAL_I2C_Mem_Read(&hi2c1, MPU6050_I2C_ADDR, ACCEL_XOUT_H_REG, 1, Rec_Data, 6,
+			50);
+
+	param->ax = (int16_t) (Rec_Data[0] << 8 | Rec_Data[1]);
+	param->ay = (int16_t) (Rec_Data[2] << 8 | Rec_Data[3]);
+	param->az = (int16_t) (Rec_Data[4] << 8 | Rec_Data[5]);
+
+	param->Ax = param->ax / 16384.0f;
+	param->Ay = param->ay / 16384.0f;
+	param->Az = param->az / 16384.0f;
 }
 
-float mpu_roll_pitch_calibration_accel(int rp) {
+void mpu_roll_pitch_read_accel( accel_roll_pitch *data) {
+	mpu_accel_raw accel ;
+	mpu_accel_read(&accel);
+
+	data->Roll = atan2f(accel.Ay, sqrtf(accel.Ax * accel.Ax + accel.Az * accel.Az)) * 180.0f / M_PI;
+	data->Pitch = atan2f((-accel.Ax), sqrtf(accel.Ay * accel.Ay + accel.Az * accel.Az)) * 180.0f / M_PI;
+}
+
+void mpu_roll_pitch_calibration_accel(accel_roll_pitch_calib_constant *calib) {
+
+	accel_roll_pitch angels ;
+	mpu_roll_pitch_read_accel(&angels);
+
+	for (int i = 0; i < 2000; i++) {
+		calib->r += angels.roll;
+		calib->p += angels.pitch;
+		HAL_Delay(1);
+
+	}
+	calib->rc = r / 2000.0f;
+	calib->pc = p / 2000.0f;
+}
+
+float mpu_roll_pitch_calibration_gyro(gyro_roll_pitch_calib_constant *data) {
 
 	float r = 0; 
 	float p = 0;
 
-	for (int i = 0; i < 2000; i++) {
-		r += mpu_roll_pitch_read_accel(0);
-		p += mpu_roll_pitch_read_accel(1);
-		HAL_Delay(1);
-
-	}
-
-	float rc = r / 2000.0f;
-	float pc = p / 2000.0f;
-
-	if (rp == 0)
-	{
-		return rc;
-	}
-	else if (rp == 1)
-	{
-		return pc;
-	}
-	else
-	{
-		return 0.0f;
-	}
-}
-
-float mpu_roll_pitch_calibration_gyro(int rp) {
-
-	float r = 0; 
-	float p = 0;
+	gyro_roll_pitch angle ;
+	mpu_roll_pitch_read_gyro(&angle,0.001f);
 
 	for (int i = 0; i < 2000; i++) {
-		r += mpu_roll_pitch_read_gyro(0, 0.001f);
-		p += mpu_roll_pitch_read_gyro(1, 0.001f);
+		r += angle.roll;
+		p += angle.pitch;
 		HAL_Delay(1);
 	}
 
-	float rc = r / 2000.0f;
-	float pc = p / 2000.0f;
+	data->rc = r / 2000.0f;
+	data->pc = p / 2000.0f;
 
-	if (rp == 0)
-	{
-		return rc;
-	}
-	else if (rp == 1)
-	{
-		return pc;
-	}
-	else
-	{
-		return 0.0f;
-	}
 }
 
-float mpu_gyro_calibration(int axis) {
+float mpu_gyro_calibration(gyro_calib *data) {
 
 	float gx = 0; 
 	float gy = 0; 
 	float gz = 0;
 
+	mpu_gyro_raw g_raw_values;
+	mpu_gyro_read(&g_raw_values);
+
 	for (int i = 0; i < 2000; i++) {
-		gx += mpu_gyro_read(0);
-		gy += mpu_gyro_read(1);
-		gz += mpu_gyro_read(2);
+		gx += g_raw_values.Gx;
+		gy += g_raw_values.Gy;
+		gz += g_raw_values.Gz;
 		HAL_Delay(1);
 	}
 
-	float ox = gx / 2000.0f;
-	float oy = gy / 2000.0f;
-	float oz = gz / 2000.0f;
+	data->gx_offset = gx / 2000.0f;
+	data->gy_offset = gy / 2000.0f;
+	data->gz_offset = gz / 2000.0f;
 
-	if (axis == 0)
-	{
-		return ox;
-	}
-	else if (axis == 1)
-	{
-		return oy;
-	}
-	else if (axis == 2)
-	{
-		return oz;
-	}
-	else
-	{
-		return 0.0f;
-	}
 }
 
-float mpu_accel_calibration(int axis) {
+float mpu_accel_calibration(accel_calib *offset) {
 
 	float ax = 0; 
 	float ay = 0; 
 	float az = 0;
 
+	mpu_accel_raw raw_values;
+	mpu_accel_read(&raw_values);
+
+
 	for (int i = 0; i < 2000; i++) {
-		ax += mpu_accel_read(0);
-		ay += mpu_accel_read(1);
-		az += mpu_accel_read(2);
+		ax += raw_values.Ax;
+		ay += raw_values.Ay;
+		az += raw_values.Az;
 		HAL_Delay(1);
 	}
 
-	float ox = ax / 2000.0f;
-	float oy = ay / 2000.0f;
-	float oz = az / 2000.0f;
+	offset->ax_offset = ax / 2000.0f;
+	offset->ay_offset = ay / 2000.0f;
+	offset->az_offset = az / 2000.0f;
 
-	if (axis == 0)
-	{
-		return ox;
-	}
-	else if (axis == 1)
-	{
-		return oy;
-	}
-	else if (axis == 2)
-	{
-		return oz;
-	}
-	else
-	{
-		return 0.0f;
-	}
 }
 
-float mpu_gyro_read(int ret) {
+float mpu_gyro_read(mpu_gyro_raw *data) {
 
 	uint8_t Rec_Data[6];
 
@@ -279,61 +226,28 @@ float mpu_gyro_read(int ret) {
 	int16_t gy; 
 	int16_t gz;
 
-	float Gx; 
-	float Gy; 
-	float Gz;
-
 	HAL_I2C_Mem_Read(&hi2c1,MPU6050_I2C_ADDR, GYRO_XOUT_H_REG, 1, Rec_Data, 6, 50);
 	
 	gx = (int16_t) (Rec_Data[0] << 8 | Rec_Data[1]);
 	gy = (int16_t) (Rec_Data[2] << 8 | Rec_Data[3]);
 	gz = (int16_t) (Rec_Data[4] << 8 | Rec_Data[5]);
 	
-	Gx = gx / 131.0f;
-	Gy = gy / 131.0f;
-	Gz = gz / 131.0f;
-	
-	if (ret == 0)
-	{
-		return Gx;
-	}
-	else if (ret == 1)
-	{
-		return Gy;
-	}
-	else if (ret == 2)
-	{
-		return Gz;
-	}
-	else
-	{
-		return 0.0f;
-	}
+	data->Gx = gx / 131.0f;
+	data->Gy = gy / 131.0f;
+	data->Gz = gz / 131.0f;
 }
 
-float mpu_roll_pitch_read_gyro(int ret, float dt) {
+float mpu_roll_pitch_read_gyro(gyro_roll_pitch *data,float dt) {
 
-	static float roll = 0.0f;
-	static float pitch = 0.0f;
+	mpu_gyro_raw gyro; 
+	mpu_gyro_read(&gyro);
 
-	float Gx = mpu_gyro_read(0);
-	float Gy = mpu_gyro_read(1);
+	float Gx = gyro.Gx;
+	float Gy = gyro.Gy;
 
-	roll += Gx * dt;
-	pitch += Gy * dt;
-	
-	if (ret == 0)
-	{
-		return roll;
-	}
-	else if (ret == 1)
-	{
-		return pitch;
-	}
-	else
-	{
-		return 0.0f;
-	}
+	data->roll += Gx * dt;
+	data->pitch += Gy * dt;
+
 }
 
 double Kalman_get_angle(kalman_t *kalman, double newAngle, double newRate,
