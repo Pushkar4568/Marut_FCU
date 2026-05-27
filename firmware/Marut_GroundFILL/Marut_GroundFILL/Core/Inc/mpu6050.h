@@ -29,19 +29,6 @@ extern float mag_adj_y;
 extern float mag_adj_z;
 
 void mpu_init(void);
- 
-float mpu_accel_read(int ret);
-float mpu_roll_pitch_read_accel(int ret);
-float mpu_accel_calibration(int axis);
-
-float mpu_gyro_read(int ret);
-float mpu_roll_pitch_read_gyro(int ret, float dt);
-float mpu_gyro_calibration(int axis);
-
-float mpu_roll_pitch_calibration_accel(int rp);
-float mpu_roll_pitch_calibration_gyro(int rp);
-
-
 typedef struct {
     float q_angle;
     float q_bias;
@@ -50,7 +37,73 @@ typedef struct {
     float angle;
     float bias;
     float p[2][2];
-} kalman_t;
+}kalman_t;
+
+
+typedef struct{
+	int16_t ax;
+	int16_t ay;
+	int16_t az;
+
+	float Ax;
+	float Ay;
+	float Az;
+}mpu_accel_raw;
+
+typedef struct{
+
+	float roll ;
+    float pitch ;
+
+}accel_roll_pitch;
+
+typedef struct{
+
+	float rc ;
+	float pc;
+}accel_roll_pitch_calib_constant;
+
+typedef struct{
+	float rc ;
+	float pc ;
+}gyro_roll_pitch_calib_constant;
+
+typedef struct{
+	float gx_offset ;
+	float gy_offset ;
+	float gz_offset ;
+}gyro_calib;
+
+typedef struct{
+	float ax_offset ;
+	float ay_offset ;
+	float az_offset ;
+}accel_calib;
+
+typedef struct{
+	float Gx;
+	float Gy;
+	float Gz;
+}mpu_gyro_raw;
+
+typedef struct{
+	float roll ;
+	float pitch ;
+}gyro_roll_pitch;
+
+
+
+void mpu_accel_read(mpu_accel_raw *param);
+void mpu_roll_pitch_read_accel(accel_roll_pitch *data);
+void mpu_accel_calibration(accel_calib *offset);
+
+void mpu_gyro_read(mpu_gyro_raw *data);
+void mpu_roll_pitch_read_gyro(gyro_roll_pitch *data, float dt);
+void mpu_gyro_calibration(gyro_calib *data);
+
+void mpu_roll_pitch_calibration_accel(accel_roll_pitch_calib_constant *calib);
+void mpu_roll_pitch_calibration_gyro(gyro_roll_pitch_calib_constant *data);
+
 
 double Kalman_get_angle(kalman_t *kalman,
                         double newAngle,
@@ -59,4 +112,4 @@ double Kalman_get_angle(kalman_t *kalman,
 
 void mpu_get_kalman_angles(float *roll, float *pitch);
 
-#endif 
+#endif

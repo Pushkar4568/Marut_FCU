@@ -884,12 +884,20 @@ int main(void)
 
 	HAL_Delay(1000);
 
-	calibration_const_global_roll_accel = mpu_roll_pitch_calibration_accel(0);
-	calibration_const_global_pitch_accel = mpu_roll_pitch_calibration_accel(1);
+	/*	-replaced mpu_roll_pitch_calibration_accel() , mpu_gyro_calibration() to struct-based outputs
+		-now it returns a struct with all calibration values , instead of calling multiple functions */
+	accel_roll_pitch_calib_constant roll_pitch_calib_offset;
+	mpu_roll_pitch_calibration_accel(&roll_pitch_calib_offset);
 
-	calibration_const_global_gx = mpu_gyro_calibration(0);
-	calibration_const_global_gy = mpu_gyro_calibration(1);
-	calibration_const_global_gz = mpu_gyro_calibration(2);
+	calibration_const_global_roll_accel = roll_pitch_calib_offset.rc;
+	calibration_const_global_pitch_accel = roll_pitch_calib_offset.pc;
+
+	gyro_calib gyro_calib_offset;
+	mpu_gyro_calibration(&gyro_calib_offset);
+
+	calibration_const_global_gx = gyro_calib_offset.gx_offset;
+	calibration_const_global_gy = gyro_calib_offset.gy_offset;
+	calibration_const_global_gz = gyro_calib_offset.gz_offset;
 
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // onboard led on
 
@@ -1791,15 +1799,17 @@ void quad_mode(void *argument)
 				prev_error_angle_pitch = PIDReturn[1];
 				prev_iterm_angle_pitch = PIDReturn[2];
 
+				mpu_gyro_raw raw_gyro;
+			    mpu_gyro_read(&raw_gyro);
 				//rate controller
 				error_rate_roll = desired_rate_roll
-						- (mpu_gyro_read(0) - calibration_const_global_gx); //x
+						- (raw_gyro.Gx - calibration_const_global_gx); //x
 
 				error_rate_pitch = desired_rate_pitch
-						- (mpu_gyro_read(1) - calibration_const_global_gy); //y
+						- (raw_gyro.Gy - calibration_const_global_gy); //y
 
 				error_rate_yaw = desired_rate_yaw
-						- (mpu_gyro_read(2) - calibration_const_global_gz); //z
+						- (raw_gyro.Gz - calibration_const_global_gz); //z
 
 				pid_equation(error_rate_roll, p_rate_roll_s, i_rate_roll_s,
 						d_rate_roll_s, prev_error_rate_roll, prev_iterm_rate_roll);
@@ -1891,12 +1901,15 @@ void quad_mode(void *argument)
 
 				mpu_get_kalman_angles(&kalman_roll, &kalman_pitch);
 
+				mpu_gyro_raw raw_gyro;
+			    mpu_gyro_read(&raw_gyro);
+
 				error_rate_roll = desired_rate_roll
-						- (mpu_gyro_read(0) - calibration_const_global_gx); //x
+						- (raw_gyro.Gx - calibration_const_global_gx); //x
 				error_rate_pitch = desired_rate_pitch
-						- (mpu_gyro_read(1) - calibration_const_global_gy); //y
+						- (raw_gyro.Gy - calibration_const_global_gy); //y
 				error_rate_yaw = desired_rate_yaw
-						- (mpu_gyro_read(2) - calibration_const_global_gz); //z
+						- (raw_gyro.Gz - calibration_const_global_gz); //z
 
 				p_rate_roll_s = map_rc_to_pid(display_channels[5]);
 				p_rate_pitch_s = map_rc_to_pid(display_channels[5]);
@@ -2021,14 +2034,21 @@ void telemetry_task(void *argument)
 		}
 
 		else if (arm_flag == 0 && disarm_flag == 1) {
+			/*	-replaced mpu_accel_read() , mpu_gyro_read() to struct-based outputs
+				-now it returns a struct with all calibration values , instead of calling multiple functions */
+
+      		mpu_accel_raw raw_accel;
+			mpu_accel_read(&raw_accel);
+			mpu_gyro_raw raw_gyro;
+			mpu_gyro_read(&raw_gyro);
 
 			mpu_get_kalman_angles(&kalman_roll, &kalman_pitch);
-			g_global_x = mpu_gyro_read(0);
-			g_global_y = mpu_gyro_read(1);
-			g_global_z = mpu_gyro_read(2);
-			a_global_x = mpu_accel_read(0);
-			a_global_y = mpu_accel_read(1);
-			a_global_z = mpu_accel_read(2);
+			g_global_x = raw_gyro.Gx;
+			g_global_y = raw_gyro.Gy;
+			g_global_z = raw_gyro.Gz;
+			a_global_x = raw_accel.Ax;
+			a_global_y = raw_accel.Ay;
+			a_global_z = raw_accel.Az;
 			alt_ext = bmp280_get_altitude();
 			send_heartbeat_disarmed();
 			send_attitude();
@@ -2099,8 +2119,11 @@ void fw_mode(void *argument)
 				desired_rate_pitch = -rate_saturation_limit + 0.1f;
 			}
 
-			Gx = mpu_gyro_read(0) - calibration_const_global_gx;
-			Gy = mpu_gyro_read(1) - calibration_const_global_gy;
+			mpu_gyro_raw raw_gyro;
+			mpu_gyro_read(&raw_gyro);
+
+			Gx = raw_gyro.Gx - calibration_const_global_gx;
+			Gy = raw_gyro.Gy - calibration_const_global_gy;
 
 			error_rate_roll = desired_rate_roll - Gx;
 			error_rate_pitch = desired_rate_pitch - Gy;
